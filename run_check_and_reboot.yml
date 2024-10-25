@@ -52,7 +52,7 @@
 
     - name: Registrar log de reinicialização no WSL
       ansible.builtin.shell: |
-        echo "{{ inventory_hostname }} foi reiniciado com sucesso em $(date)" >> /home/usuario/ansiblwe/reboot_log.txt
+        echo "{{ inventory_hostname }} foi reiniciado com sucesso em $(date)" >> C:/Path/Para/Scripts/reboot_log.txt
       delegate_to: localhost
       run_once: true
       become: no
