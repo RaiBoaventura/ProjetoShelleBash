@@ -1,94 +1,232 @@
-# Monitoramento e Automação de Atualização do Windows Server
+# Guia Completo para Instalação, Configuração e Uso do Sistema de Atualização de Servidores Windows com Ansible
 
-Este repositório contém três scripts PowerShell para automatizar o processo de monitoramento de serviços, logoff de usuários e atualização do sistema em servidores Windows, orquestrados por um playbook Ansible.
+## Visão Geral
 
-## Arquivos
+Este guia detalha como configurar um sistema automatizado para gerenciar atualizações de servidores Windows utilizando Ansible. O processo envolve:
 
-- **checkServices.ps1**: Script que verifica o status de uma lista de serviços. Se todos os serviços estiverem parados, ele executa o script de atualização do Windows.
-- **logoff_users.ps1**: Realiza o logoff de todos os usuários conectados ao servidor, mantendo apenas o usuário que executa o script conectado.
-- **updateWindows.ps1**: Verifica atualizações do Windows e instala todas as disponíveis, ignorando uma atualização específica que pode causar problemas.
+- Instalação e configuração do Ansible no Linux/WSL.
+- Configuração de conexão entre Ansible e servidores Windows.
+- Uso de scripts PowerShell para verificar e instalar atualizações.
+- Automação de logoff de usuários, instalação de atualizações e reinicialização dos servidores de forma ordenada.
 
-## Objetivo dos Scripts
+## 1. Requisitos do Sistema
 
-### checkServices.ps1
+- **Sistema Operacional**: Linux, macOS, ou Windows com WSL (Windows Subsystem for Linux).
+- **Python**: Ansible é baseado em Python, portanto, é necessário ter o Python 3 instalado.
 
-- **Propósito**: Monitorar uma lista de serviços críticos em execução no servidor. Quando todos os serviços especificados são detectados como parados, ele aciona o processo de atualização do sistema.
-- **Como Funciona**:
-  - Verifica o status dos serviços listados usando `Get-Service`.
-  - Registra o status de cada serviço em um arquivo de log.
-  - Se todos os serviços estiverem parados, ele executa o script `updateWindows.ps1` para iniciar as atualizações do sistema.
-  - O script é orquestrado pelo Ansible, que garante que ele seja executado no momento apropriado em cada servidor.
+---
 
-### logoff_users.ps1
+## 2. Instalação do Ansible e Bibliotecas Necessárias
 
-- **Propósito**: Desconectar todos os usuários ativos no servidor, exceto o usuário que executa o script, preparando o ambiente para a manutenção.
-- **Como Funciona**:
-  - Identifica o usuário atual que está executando o script.
-  - Lista todas as sessões de usuários no servidor.
-  - Faz logoff de todas as sessões, exceto a do usuário que executa o script.
-  - Cria um arquivo de flag para indicar que o processo de logoff foi concluído, permitindo que o Ansible saiba que pode prosseguir com as próximas etapas de atualização.
+### Passo 1: Atualizar o Sistema
 
-### updateWindows.ps1
+Atualize os pacotes do sistema para garantir que tudo funcione corretamente.
 
-- **Propósito**: Realizar a atualização do Windows de forma automatizada, ignorando uma atualização específica que pode causar problemas (por exemplo, uma atualização de driver de impressora que não é relevante).
-- **Como Funciona**:
-  - Usa o módulo `PSWindowsUpdate` para buscar atualizações disponíveis.
-  - Filtra e ignora a atualização problemática, garantindo que ela não seja instalada.
-  - Instala todas as outras atualizações disponíveis, registrando o progresso e quaisquer erros em um arquivo de log.
-  - Cria um arquivo de flag para indicar que as atualizações foram concluídas, permitindo que o Ansible saiba que pode avançar para o próximo passo, como reiniciar o servidor.
+```bash
+sudo apt update && sudo apt upgrade -y
+```
 
-## Observação Importante: Ajuste dos Caminhos dos Diretórios
+### Passo 2: Instalar Python e Pip
 
-**Os diretórios e caminhos dos scripts podem variar de máquina para máquina.** Certifique-se de ajustar os caminhos no início de cada script para refletir a estrutura de diretórios específica de cada servidor. Exemplos de caminhos como `C:\Path\Para\Logs\` e `C:\Path\Para\Scripts\` são genéricos e devem ser modificados conforme necessário.
+Instale o Python 3 e o Pip, caso ainda não estejam instalados.
 
-### Exemplos de Caminhos a Serem Ajustados:
+```bash
+sudo apt install python3 python3-pip -y
+```
 
-- Caminho dos scripts `logoff_users.ps1` e `updateWindows.ps1` no `checkServices.ps1`:
-  
-  ```powershell
-  $LOGOFF_SCRIPT_PATH = "C:\Path\Para\Scripts\logoff_users.ps1"
-  $UPDATE_SCRIPT_PATH = "C:\Path\Para\Scripts\updateWindows.ps1"
-  ```
+### Passo 3: Instalar o Ansible
 
-- Caminho do arquivo de log em cada script:
-  
-  ```powershell
-  $LOG_FILE = "C:\Path\Para\Logs\services_status.log"
-  ```
+Instale o Ansible usando o Pip:
 
-Verifique e ajuste esses caminhos antes de executar os scripts em cada servidor para garantir que eles funcionem corretamente.
+```bash
+pip3 install ansible
+```
 
-## Como os Scripts Funcionam em Conjunto
+### Passo 4: Verificar a Instalação do Ansible
 
-1. **Monitoramento de Serviços**:
-   - O `checkServices.ps1` é executado pelo Ansible para monitorar se os serviços críticos estão em execução.
-   - Enquanto algum serviço estiver ativo, ele espera e verifica novamente.
-   - Quando todos os serviços são detectados como parados, o script aciona o `updateWindows.ps1` para iniciar as atualizações.
+Verifique se o Ansible foi instalado corretamente:
 
-2. **Logoff de Usuários**:
-   - O Ansible também executa o `logoff_users.ps1` para garantir que todos os usuários, exceto o administrador atual, sejam desconectados antes de iniciar a atualização.
-   - Isso ajuda a prevenir problemas durante o processo de atualização, como arquivos abertos e conexões ativas que podem interferir nas atualizações.
+```bash
+ansible --version
+```
 
-3. **Processo de Atualização**:
-   - O `updateWindows.ps1` é chamado para buscar e instalar atualizações. Ele ignora qualquer atualização que possa causar problemas e prossegue com as demais.
-   - Ao concluir, o script cria um arquivo de flag (`update_completed.flag`) que o Ansible usa para verificar que a etapa foi concluída com sucesso.
-   - Depois que a atualização é concluída, o Ansible pode iniciar o processo de reinicialização do servidor, garantindo que as atualizações sejam aplicadas corretamente.
+### Passo 5: Instalar `pywinrm`
 
-## Estrutura de Logs e Flags
+`pywinrm` é necessário para que o Ansible se conecte a servidores Windows:
 
-- **Logs**:
-  - Os eventos de execução dos scripts são registrados em arquivos de log no caminho configurado (`services_status.log`, `logoff_log.txt`, e `windows_update.log`), permitindo rastrear o progresso de cada etapa.
-- **Flags**:
-  - `logoff_completed.flag`: Indica que o processo de logoff foi concluído.
-  - `update_completed.flag`: Indica que as atualizações foram concluídas, permitindo que o Ansible saiba que pode prosseguir para a reinicialização.
+```bash
+pip3 install pywinrm
+```
 
-## Integração com o Ansible
+### Passo 6: Configurar o WinRM nos Servidores Windows
 
-O Ansible orquestra a execução desses scripts em cada servidor, garantindo que cada passo seja realizado na ordem correta:
+Em cada servidor Windows, execute os seguintes comandos no PowerShell com permissões administrativas para configurar o WinRM:
 
-1. **Executa o `checkServices.ps1`**: Para monitorar os serviços e iniciar a atualização quando apropriado.
-2. **Executa o `logoff_users.ps1`**: Para garantir que o ambiente esteja preparado para as atualizações.
-3. **Executa o `updateWindows.ps1`**: Para aplicar as atualizações necessárias ao sistema.
+```powershell
+winrm quickconfig
+Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value $true
+Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
+Restart-Service winrm
+```
 
-Esses scripts são automatizados pelo Ansible, garantindo que sejam executados de forma consistente em todos os servidores de um ambiente de produção, mantendo-os atualizados e prontos para uso.
+Esses comandos configuram o WinRM para permitir conexões não criptografadas e autenticação básica, necessárias para a comunicação com o Ansible.
+
+---
+
+## 3. Instalação do Módulo PSWindowsUpdate
+
+### O que é o PSWindowsUpdate?
+
+**PSWindowsUpdate** é um módulo do PowerShell que permite gerenciar as atualizações do Windows de forma automatizada. Ele é essencial para que o script `updateWindows.ps1` funcione corretamente, pois fornece os comandos necessários para verificar e instalar atualizações.
+
+### Passo a Passo para Instalar o PSWindowsUpdate
+
+1. **Abrir o PowerShell como Administrador**:
+
+   No servidor Windows, abra o PowerShell com privilégios administrativos (clique com o botão direito e selecione "Executar como administrador").
+
+2. **Instalar o Módulo PSWindowsUpdate**:
+
+   Execute o comando abaixo para instalar o módulo:
+
+   ```powershell
+   Install-PackageProvider -Name NuGet -Force
+   Install-Module -Name PSWindowsUpdate -Force -SkipPublisherCheck
+   ```
+
+   - O primeiro comando instala o provedor `NuGet`, necessário para baixar e instalar módulos do PowerShell.
+   - O segundo comando instala o módulo **PSWindowsUpdate**.
+
+3. **Verificar a Instalação do Módulo**:
+
+   Para verificar se o módulo foi instalado corretamente, execute:
+
+   ```powershell
+   Get-Module -Name PSWindowsUpdate -ListAvailable
+   ```
+
+   Se tudo estiver correto, você verá informações sobre o módulo **PSWindowsUpdate** na saída.
+
+4. **Permitir Scripts Remotos**:
+
+   Se você estiver enfrentando problemas ao executar scripts remotamente, pode ser necessário permitir scripts:
+
+   ```powershell
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+   Isso permite a execução de scripts locais sem assinatura e scripts baixados de forma remota que sejam assinados por um editor confiável.
+
+---
+
+## 4. Configuração do Inventário Ansible
+
+Crie um arquivo `hosts` para listar os servidores que serão gerenciados:
+
+```bash
+nano hosts
+```
+
+Adicione o conteúdo abaixo:
+
+```ini
+[windows_servers]
+server1 ansible_host=<IP_DO_SERVIDOR> ansible_user=<USUARIO> ansible_password='<SENHA>' ansible_connection=winrm ansible_winrm_transport=ntlm ansible_port=5985
+```
+
+- **[windows_servers]**: Nome do grupo de servidores.
+- **ansible_host**: Endereço IP do servidor.
+- **ansible_user**: Usuário com permissões administrativas.
+- **ansible_password**: Senha do usuário.
+- **ansible_connection=winrm**: Método de conexão para servidores Windows.
+
+### Testar Conexão com os Servidores
+
+Verifique se o Ansible consegue se conectar aos servidores:
+
+```bash
+ansible windows_servers -i hosts -m win_ping
+```
+
+Se tudo estiver configurado corretamente, você verá uma resposta "pong" de cada servidor.
+
+---
+
+## 5. Configuração dos Scripts PowerShell
+
+Todos os scripts PowerShell devem ser colocados no diretório de sua preferência, com suas devidas modificações nos scripts PowerShell e Ansible, por exemplo: `C:\Path\Para\Scripts\` em cada servidor.
+
+## 6. Execução do Playbook Ansible
+
+Crie o arquivo `run_check_and_reboot.yml` para automatizar o processo:
+
+```bash
+nano run_check_and_reboot.yml
+```
+
+Adicione o conteúdo abaixo:
+
+```yaml
+---
+- name: Logoff de usuários, verificar serviços e reiniciar servidores
+  hosts: windows_servers
+  become: yes
+  become_method: runas
+  become_user: <USUARIO>
+  tasks:
+    - name: Executar script de logoff de usuários no servidor
+      ansible.builtin.win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -File C:\Path\Para\Scripts\logoff_users.ps1
+      register: logoff_result
+      ignore_errors: no
+
+    - name: Verificar se o logoff foi concluído
+      ansible.builtin.win_stat:
+        path: C:\Path\Para\Scripts\logoff_completed.flag
+      register: logoff_flag_status
+      until: logoff_flag_status.stat.exists
+      retries: -1
+      delay: 60
+
+    - name: Executar script de verificação de serviços no servidor
+      ansible.builtin.win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -File C:\Path\Para\Scripts\checkServices.ps1
+      ignore_errors: no
+
+    - name: Executar script de atualização do Windows
+      ansible.builtin.win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -File C:\Path\Para\Scripts\updateWindows.ps1
+      register: update_result
+      ignore_errors: no
+
+    - name: Verificar se a atualização foi concluída
+      ansible.builtin.win_stat:
+        path: C:\Path\Para\Scripts\update_completed.flag
+      register: update_flag_status
+      until: update_flag_status.stat.exists
+      retries: -1
+      delay: 60
+
+    - name: Reiniciar o servidor após a conclusão do script de atualização
+      ansible.builtin.win_reboot:
+      serial: 1
+
+    - name: Registrar log de reinicialização
+      local_action: shell echo "{{ inventory_hostname }} foi reiniciado com sucesso em $(date)" >> /home/<USUARIO>/ansible_logs/reboot_log.txt
+      run_once: true
+```
+
+### Executar o Playbook
+
+Execute o playbook:
+
+```bash
+ansible-playbook -i hosts run_check_and_reboot.yml
+```
+
+---
+
+## 7. Conclusão
+
+Este guia completo orienta desde a instalação do Ansible e configuração dos servidores Windows até a execução do playbook de automação. Ele permite que qualquer pessoa configure e use o sistema de forma eficaz, mesmo sem conhecimento prévio do desenvolvimento dos scripts. Se precisar de mais ajuda, consulte as seções de solução de problemas e perguntas frequentes!
 
