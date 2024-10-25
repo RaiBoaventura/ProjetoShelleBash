@@ -1,0 +1,58 @@
+
+---
+- name: Logoff de usuários, verificar serviços e realizar atualização em todos os servidores
+  hosts: windows_servers
+  become: yes
+  become_method: runas
+  become_user: <USUARIO>
+  tasks:
+    - name: Executar script de logoff de usuários no servidor
+      ansible.builtin.win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -File C:\Path\Para\Scripts\logoff_users.ps1
+      register: logoff_result
+      ignore_errors: no
+
+    - name: Verificar se o logoff foi concluído
+      ansible.builtin.win_stat:
+        path: C:\Path\Para\Scripts\logoff_flag_status.flag
+      register: logoff_flag_status
+      until: logoff_flag_status.stat.exists
+      retries: 10
+      delay: 60
+
+    - name: Executar script de atualização do Windows
+      ansible.builtin.win_shell: |
+        powershell.exe -ExecutionPolicy Bypass -File C:\Path\Para\Scripts\updateWindows.ps1
+      register: update_result
+      ignore_errors: no
+
+    - name: Verificar se a atualização foi concluída
+      ansible.builtin.win_stat:
+        path: C:\Path\Para\Scripts\update_completed.flag
+      register: update_flag_status
+      until: update_flag_status.stat.exists
+      retries: 10
+      delay: 60
+
+- name: Reiniciar servidores em ordem após todas as atualizações concluídas
+  hosts: windows_servers
+  become: yes
+  become_method: runas
+  become_user: <USUARIO>
+  serial: 1  # Reinicia os servidores um de cada vez
+  tasks:
+    - name: Verificar se a atualização foi concluída localmente antes de reiniciar
+      ansible.builtin.win_stat:
+        path: C:\Path\Para\Scripts\update_completed.flag
+      register: final_update_flag_status
+
+    - name: Reiniciar o servidor após a conclusão da atualização
+      ansible.builtin.win_reboot:
+      when: final_update_flag_status.stat.exists  # Reinicia apenas se a flag de atualização existir para esse servidor
+
+    - name: Registrar log de reinicialização no WSL
+      ansible.builtin.shell: |
+        echo "{{ inventory_hostname }} foi reiniciado com sucesso em $(date)" >> /home/usuario/ansiblwe/reboot_log.txt
+      delegate_to: localhost
+      run_once: true
+      become: no

@@ -1,0 +1,7 @@
+[windows_servers]
+server1 ansible_host=123.30.2.3 ansible_user=USUARIO ansible_password=SENHA ansible_connection=winrm ansible_winrm_transport=ntlm ansible_port=0000
+
+
+[windows_servers:vars]
+ansible_winrm_server_cert_validation=ignore
+
